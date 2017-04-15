@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+<body style="margin: 0; padding: 0;">
+<canvas id="canvas" style="border: 1px solid #000;"></canvas>
+<script type="text/javascript">
+    var weights = [0, 0.9, 0.2];
+
+    var learningRate = 0.001;
+
+    var LearningOrderPointer = 0;
+
+    var LearningOrder = [
+        1, 1,
+        -1, 1,
+        1, -1,
+        -1, -1];
+
+    var LearningComplete = 0;
+
+    var canvas = document.getElementById("canvas");
+    var ctx = canvas.getContext("2d");
+
+    ResizeCanvas();
+
+    // canvas init
+    // минимальная сторона холста
+    var min = Math.min(canvas.width, canvas.height);
+
+    // отступ в 10% от длинны минимальной стороны холста
+    var margin = min / 10;
+
+    // условная единица на грфике
+    var S = (min - 2 * margin) / 4;
+
+    // центр канваса, координаты 0, 0
+    var X0 = canvas.width / 2;
+    var Y0 = canvas.height / 2;
+
+    NextSample();
+
+    function ResizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+
+    function Redraw() {
+
+// очистить холст
+        ClearCanvas();
+
+// горизонтальная ось координат
+        DrawLine(new Plot(-2, 0), new Plot(2, 0));
+
+// вертикальная ось координат
+        DrawLine(new Plot(0, -2), new Plot(0, 2));
+
+        var A = weights[1];
+        var B = weights[2];
+        var C = weights[0];
+
+        for (var x = -1; x <= 1; x += 2) {
+            for (var y = -1; y <= 1; y += 2) {
+                var result = A * x + B * y + C;
+                var brush = result < 0 ? false : true;
+
+                DrawCircle(new Plot(x, y), brush);
+            }
+        }
+
+        console.log({
+            A: A,
+            B: B,
+            C: C
+        })
+
+// нормирвание длинн
+        sum = Math.sqrt(A * A + B * B);
+        A /= sum;
+        B /= sum;
+        C /= sum;
+        A *= 2;
+        B *= 2;
+        C /= 2;
+
+        lineCenter = new Plot(-C * A, -C * B);
+
+        DrawLineNative(lineCenter.x - S * B, lineCenter.y - S * A, lineCenter.x + S * B, lineCenter.y + S * A);
+        DrawLineNative(lineCenter.x, lineCenter.y, lineCenter.x + (50 * A), lineCenter.y - (50 * B));
+    }
+
+    function Plot(x, y) {
+        this.x = X0 + S * x;
+        this.y = Y0 - S * y;
+    }
+
+    function DrawLine(plot1, plot2) {
+        ctx.beginPath();
+        ctx.moveTo(plot1.x, plot1.y);
+        ctx.lineTo(plot2.x, plot2.y);
+        ctx.closePath();
+        ctx.stroke();
+    }
+
+    function DrawLineNative(x1, y1, x2, y2) {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.closePath();
+        ctx.stroke();
+    }
+
+    function DrawCircle(plotCenter, fill) {
+        ctx.beginPath();
+        ctx.arc(plotCenter.x, plotCenter.y, 5, 0, 2 * Math.PI);
+        if (fill) ctx.fill();
+        ctx.closePath();
+        ctx.stroke();
+    }
+
+    function ClearCanvas() {
+// Store the current transformation matrix
+        ctx.save();
+
+// Use the identity matrix while clearing the canvas
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+// Restore the transform
+        ctx.restore();
+    }
+
+    function NextSample() {
+
+        var x = LearningOrder[LearningOrderPointer];
+        var y = LearningOrder[LearningOrderPointer + 1];
+
+        LearningOrderPointer += 2;
+        if (LearningOrderPointer >= LearningOrder.length) LearningOrderPointer = 0;
+
+        var input = [x, y];
+        var output = [x > 0 && y > 0 ? 1 : -1];
+
+// обучение на конкретном примере
+        learningRun(input, output);
+
+// отрисовать результат
+        Redraw();
+
+        if (LearningComplete < 5) {
+// следующий набор обучающих данных
+            setTimeout(NextSample, 1);
+        } else {
+            console.log('Complete');
+//            window.location = window.location;
+        }
+    }
+
+    function learningRun(input, expectedOutput) {
+
+// взвешенна сумма произведения вектоа весов и вектора входных значений
+        var s = weights[0] + weights[1] * input[0] + weights[2] * input[1];
+
+// применяем функцию активации к взвешенной сумме
+        var output = Math.sign(s);
+
+// ошибка
+        var e = expectedOutput - output;
+
+// если ошибка есть
+        if (e != 0) {
+// меняем веса
+            weights[0] += learningRate * e;
+            weights[1] += learningRate * e * input[0];
+            weights[2] += learningRate * e * input[1];
+            LearningComplete = 0;
+        }
+        else
+        {
+            LearningComplete++;
+        }
+
+//console.log(weights);
+
+        logResult(input[0], input[1], output, expectedOutput, s)
+    }
+
+    function logResult(x1, x2, output, expected, sum) {
+        css = output == expected ? 'background: #0f0; padding: 3px;' : 'background: #f00; padding: 3px;';
+        console.log('%c' + x1 + ' and ' + x2 + ' = ' + output + ' expexted(' + expected + ')' + ' sum(' + sum + ')', css);
+    }
+</script>
+</body>
+</html>
